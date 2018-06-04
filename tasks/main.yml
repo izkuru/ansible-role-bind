@@ -12,6 +12,10 @@
 - name: Check whether `bind_zone_master_server_ip` was set
   assert:
     that: bind_zone_master_server_ip is defined
+    
+- name: Check that `bind_zone_serial_format` has a valid value
+  assert:
+    that: bind_zone_serial_format == "utc" or bind_zone_serial_format == "date"
 
 - name: Install BIND
   package:
@@ -33,12 +37,21 @@
     - "{{ bind_dir }}/data"
   tags: bind
 
-- name: Create serial, based on bind_zone_serial_format
-  command: date -u +{{ bind_zone_serial_format }}
+- name: Create serial, based on UTC
+  command: date -u +%s
   register: timestamp
   changed_when: false
   run_once: true
   tags: bind
+  when: bind_zone_serial_format == "utc"
+
+- name: Create serial, based on datestamp (YYYYmmddxx)
+  command: date -u +%Y%m%d00
+  register: datestamp
+  changed_when: false
+  run_once: true
+  tags: bind
+  when: bind_zone_serial_format == "date"
 
 - name: Read forward zone hashes
   shell: 'grep "^; Hash:" {{ bind_dir }}/{{ item.name }} || true'
