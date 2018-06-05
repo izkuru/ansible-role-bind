@@ -37,7 +37,7 @@
     - "{{ bind_dir }}/data"
   tags: bind
 
-- name: Create serial, based on UTC
+- name: Create serial, based on UTC UNIX time
   command: date -u +%s
   register: timestamp
   changed_when: false
