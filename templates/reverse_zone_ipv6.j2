@@ -29,7 +29,19 @@
 {%   if _hash_serial and _hash_serial[0] == _zone['hash'] %}
 {%     set _ = _zone.update({'serial': _hash_serial[1]}) %}
 {%   else %}
-{%     set _ = _zone.update({'serial': timestamp.stdout}) %}
+{%     if bind_zone_serial_format == "utc" %}
+{%       set _ = _zone.update({'serial': timestamp.stdout}) %}
+{%     else %}
+{%       if _hash_serial %}
+{%         if datestamp.stdout|int > _hash_serial[1]|int %}
+{%           set _ = _zone.update({'serial': datestamp.stdout}) %}
+{%         else %}
+{%           set _ = _zone.update({'serial': _hash_serial[1]|int + 1}) %}
+{%         endif %}
+{%       else %}
+{%         set _ = _zone.update({'serial': datestamp.stdout}) %}
+{%       endif %}
+{%     endif %}
 {%   endif %}
 {% endfor %}
 {#
