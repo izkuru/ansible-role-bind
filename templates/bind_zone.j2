@@ -32,7 +32,15 @@
 {%   if _hash_serial and _hash_serial[0] == _zone['hash'] %}
 {%     set _ = _zone.update({'serial': _hash_serial[1]}) %}
 {%   else %}
-{%     set _ = _zone.update({'serial': timestamp.stdout}) %}
+{%     if bind_zone_serial_format == "utc" %}
+{%       set _ = _zone.update({'serial': timestamp.stdout}) %}
+{%     else %}
+{%       if datestamp.stdout|int > _hash_serial[1]|int %}
+{%         set _ = _zone.update({'serial': datestamp.stdout}) %}
+{%       else %}
+{%         set _ = _zone.update({'serial': _hash_serial[1]|int + 1}) %}
+{%       endif %}
+{%     endif %}
 {%   endif %}
 {% endfor %}
 {#
@@ -58,23 +66,23 @@ $TTL {{ _zone_data['ttl'] }}
 
 {% if _zone_data['mname']|length > 0 %}
 {% for ns in _zone_data['mname'] %}
-                     IN  NS     {{ ns }}{% if not ns|regex_search('\.$') %}.{{ _zone_data['domain'] }}.{% endif %}
+                           IN  NS     {{ ns }}{% if not ns|regex_search('\.$') %}.{{ _zone_data['domain'] }}.{% endif %}
 
 {% endfor %}
 {% else %}
-                     IN  NS     {{ ansible_hostname }}.{{ _zone_data['domain'] }}.
+                           IN  NS     {{ ansible_hostname }}.{{ _zone_data['domain'] }}.
 {% endif %}
 {% for ns in _zone_data['aname'] %}
-                     IN  NS     {{ ns }}.
+                           IN  NS     {{ ns }}.
 {% endfor %}
 
 {% for mail in _zone_data['mail'] %}
-{% if loop.first %}@{% else %} {% endif %}                    IN  MX     {{ mail.preference}}  {{ mail.name }}{% if not mail.name.endswith('.') %}.{{ _zone_data['domain'] }}.{% endif %} 
+{% if loop.first %}@{% if mail.ttl is defined %}                   {{ "%-6s"|format(mail.ttl) }}{% else %}                         {% endif %}{% else %}                          {% endif %} IN  MX     {{ "%-2s"|format(mail.preference)}}  {{ mail.name }}{% if not mail.name.endswith('.') %}.{{ _zone_data['domain'] }}.{% endif %}
 {% endfor %}
 
 {% if _zone_data['delegate']|length > 0 %}
 {% for host in _zone_data['delegate'] %}
-{{ host.zone.ljust(20) }} IN  NS     {{ host.dns }}
+{{ host.zone.ljust(26) }} IN  NS     {{ host.dns }}
 {% endfor %}
 {% endif %}
 
@@ -82,48 +90,28 @@ $TTL {{ _zone_data['ttl'] }}
 {% for host in _zone_data['hosts'] %}
 {% if host.ip is defined %}
 {% if host.ip is string %}
-{% if host.ttl is defined %}
-{{ host.name.ljust(20) }} {{ host.ttl }} IN  A      {{ host.ip }}
-{% else %}
-{{ host.name.ljust(20) }} IN  A      {{ host.ip }}
-{% endif %}
+{{ host.name.ljust(20) }}{% if host.ttl is defined %}{{ "%-6s"|format(host.ttl) }}{% else %}      {% endif %} IN  A      {{ host.ip }}
 {% else %}
 {% for ip in host.ip %}
-{% if host.ttl is defined %}
-{{ host.name.ljust(20) }} {{ host.ttl }} IN  A      {{ ip }}
-{% else %}
-{{ host.name.ljust(20) }} IN  A      {{ ip }}
-{% endif %}
+{{ host.name.ljust(20) }}{% if host.ttl is defined %}{{ "%-6s"|format(host.ttl) }}{% else %}      {% endif %} IN  A      {{ ip }}
 {% endfor %}
 {% endif %}
 {% endif %}
 {% if host.ipv6 is defined %}
 {% if host.ipv6 is string %}
-{% if host.ttl is defined %}
-{{ host.name.ljust(20) }} {{ host.ttl }} IN  AAAA   {{ host.ipv6 }}
-{% else %}
-{{ host.name.ljust(20) }} IN  AAAA   {{ host.ipv6 }}
-{% endif %}
+{{ host.name.ljust(20) }}{% if host.ttl is defined %}{{ "%-6s"|format(host.ttl) }}{% else %}      {% endif%} IN  AAAA   {{ host.ipv6 }}
 {% else %}
 {% for ip6 in host.ipv6 %}
-{% if host.ttl is defined %}
-{{ host.name.ljust(20) }} {{ host.ttl }} IN  AAAA   {{ ip6 }}
-{% else %}
-{{ host.name.ljust(20) }} IN  AAAA   {{ ip6 }}
-{% endif %}
+{{ host.name.ljust(20) }}{% if host.ttl is defined %}{{ "%-6s"|format(host.ttl) }}{% else %}      {% endif%} IN  AAAA   {{ ip6 }}
 {% endfor %}
 {% endif %}
 {% endif %}
 {% if host.aliases is defined %}
 {% for alias in host.aliases %}
 {% if alias is string %}
-{{ alias.ljust(20) }} IN  CNAME  {{ host.name }}
+{{ alias.ljust(26) }} IN  CNAME  {{ host.name }}
 {% else %}
-{% if alias.ttl is defined %}
-{{ alias.name.ljust(20) }} {{ alias.ttl }} IN CNAME {{ host.name }}
-{% else %}
-{{ alias.name.ljust(20) }} IN CNAME {{ host.name }}
-{% endif %}
+{{ alias.name.ljust(20) }}{% if host.ttl is defined %}{{ "%-6s"|format(host.ttl) }}{% else %}      {% endif%} IN  CNAME  {{ host.name }}
 {% endif %}
 {% endfor %}
 {% endif %}
@@ -132,14 +120,14 @@ $TTL {{ _zone_data['ttl'] }}
 {{ ansible_hostname.ljust(20) }} IN A     {{ ansible_default_ipv4.address }}
 {% endif %}
 {% for service in _zone_data['services'] %}
-{{ service.name.ljust(20) }} IN  SRV    {{ service.priority|default('0') }} {{ service.weight|default('0') }} {{ service.port }} {{ service.target }}
+{{ service.name.ljust(20) }}{% if service.ttl is defined %}{{ "%-6s"|format(service.ttl) }}{% else %}      {% endif%} IN  SRV    {{ "%-2s"|format(service.priority|default('0')) }} {{ "%-2s"|format(service.weight|default('0')) }} {{ "%-5s"|format(service.port) }} {{ service.target }}
 {% endfor %}
 {% for text in _zone_data['text'] %}
 {% if text.text is string %}
-{{ text.name.ljust(20) }} IN  TXT    "{{ text.text }}"
+{{ text.name.ljust(20) }}{% if text.ttl is defined %}{{ "%-6s"|format(text.ttl) }}{% else %}      {% endif%} IN  TXT    "{{ text.text }}"
 {% else %}
 {%   for entry in text.text %}
-{{ text.name.ljust(20) }} IN  TXT    "{{ entry }}"
+{{ text.name.ljust(20) }}{% if text.ttl is defined %}{{ "%-6s"|format(text.ttl) }}{% else %}      {% endif%} IN  TXT    "{{ entry }}"
 {%   endfor %}
 {% endif %}
 {% endfor %}
